@@ -1,13 +1,3 @@
----
-metadata:
-  generated_at: 2026-04-14T09:00:00+09:00
-  files_used:
-    - name: 파트너사_CDR_현황_260325.xlsx
-      sheet: CDR
-      rows_read: 120
-  assumptions: []
----
-
 ## Purpose
 본 스킬은 LG전자 아웃소싱 전략 관점에서
 파트너사의 경영 건전성, 공급 안정성, 품질 경쟁력, 기여도를
@@ -65,17 +55,17 @@ metadata:
 - 모든 분석은 **제공된 파일만 사용**한다.
 - 분석은 항상 **제품 단위**로 수행한다.
 - 제품이 명시되지 않은 경우 반드시 제품을 먼저 질문한다.
-- 모든 파일은 전수검사를 한다(예: 구매계약서 DEFINITION 누락하지 말 것).
-
+- 모든 파일은 전수검사를 한다.
 
 ## Data Sources
 
 ### 파일 파싱 규칙
 - Excel(.xlsx, .csv): 먼저 시트명 'Sheet1' 또는 첫 번째 시트를 우선 읽습니다. 표가 여러개면 표별로 시트명/표번호를 기록합니다.
 - PPTX: 슬라이드 내 표(table)를 우선 추출. 텍스트 블록은 별도 요약(요청 시)만 수행.
-- DOCX: 조항(조항번호), Effective Date, 계약기간, 주요 페널티 조항(지연/품질) 등을 표로 정리하여 출력.
+- DOCX: Effective Date, 계약기간 구조 (Fixed / 무기한 / 자동연장), Termination notice 기간, 납기지연 패널티 여부 데이터를 추출.
 - 인코딩: 모든 텍스트는 UTF-8로 처리. 인코딩 오류 발생 시 원본 파일의 BOM/인코딩 정보를 먼저 보고 사용자에게 보고.
 - 오류 처리: 필수 컬럼 누락/데이터 타입 불일치 시 '데이터 오류' 항목으로 표기하고, 어떤 파일/행에서 문제가 발생했는지 메타에 기록.
+- 구매계약서, 계약, 조항, 계약일(계약날짜), Effective Date, Term, penalty 관련 질문은 반드시 file_search를 사용한다
 
 ### 표준 표기 규칙 
 - 날짜: 모든 날짜는 내부 처리에서 `yyyy-mm-dd`로 정규화합니다. 입력이 "31th, Jan, 2024" 또는 "2024년 1월 31일" 또는 "’16.07월" 등으로 들어오면 표준 형식으로 변환해 사용하세요.
@@ -97,10 +87,46 @@ metadata:
 |`파트너사별_개발일정준수_평가점수_260415.csv`|품질|개발일정 준수 평가점수|제품,파트너사,개발일정준수 평가점수로 환산(클수수록 우수)|1~9 점수로 평가|
 
 ### Contract Documents
-#### 계약서 해석 방법
-  - 구매계약서는 connected agent인 **osax_knowledge_subagent**를 반드시 참조해야 함
-  - 계약서는 중요하므로 반드시 전체 문서를 빠짐없이 읽고 답변을 한다.
 
+#### 계약서 해석 방법
+  - 구매계약서는 Vector store인 AgentVectorStore_88211를 반드시 참조해야 함.
+  - 계약서는 중요하므로 반드시 전체 문서를 빠짐없이 읽고 답변을 한다.
+  - 계약서는 중요하므로 반드시 전체 문서를 전수스캔하여  빠짐없이 읽고 답변을 한다.
+  - 특히 Effective Date는 계약서 표지, 서두문장, Definitions 등 다른 위치에 있으니 잘 찾아야 함
+
+#### Rules for document usage:
+
+Any question related to:
+contract
+agreement
+clause
+effective date
+term
+termination
+warranty
+penalty
+late delivery
+epidemic defect
+notice period
+MUST use the file_search tool to retrieve information from the Vector Store before answering.
+
+Never answer contract-related questions from memory.
+Always retrieve the source document using file_search.
+
+When information is retrieved, extract:
+
+Contract No.
+Effective Date
+Term
+Auto renewal clause
+Termination notice period
+Late delivery penalty
+Warranty / Epidemic defect responsibility
+Always prioritize information from the retrieved documents over general knowledge.
+
+If the information does not exist in the retrieved document, explicitly say:
+"해당 정보는 제공된 계약서에서 확인되지 않습니다."
+  
 #### 구매계약서 리스트
 | 계약서명 | 파트너사 | 제품 | 위치 |
 |------|------:|------:|------:|
@@ -149,17 +175,3 @@ metadata:
   - |파트너사|장점|단점|데이터근거(파일:시트:행 수)|검증가능성(높음/중간/낮음)|
 - 파트너사를 그룹으로 분류를 요청한 경우 아래 컬럼을 포함한 Markdown 테이블로 출력한다.
   - |파트너사|분류그룹|분류근거|참조파일|
-
-### File schemas (예시)
-- `파트너사_경쟁사_재무_경영실적_20250926.xlsx`
-  - 필수컬럼: 업체명 (문자), (매출발생)년도 (YYYY), 총매출 (억원·숫자), 총이익 (억원), 영업이익 (억원)
-  - 예시행: ["A사", 2023, 120.5, 20.3, 10.2]
-
-- `파트너사_OTD_W12.xlsx`
-  - 필수컬럼: 사업부, 업체, Plan (정수), Shipment (정수), OTD (비율/소수 또는 퍼센트)
-  - 주의: Plan/Shipment가 없는 행은 OTD 계산 불가로 처리
-
-
-## 샘플 케이스 (검증)
-- 입력 요약: 업체 A, CDR=0.5%, OTD=98%, CPS(기여도)=5%
-- 기대 출력 요약: '품질 우수(최우선)', '공급 안정적(상)', '기여도는 낮음(Price Leverage candidate)'
